@@ -3978,6 +3978,14 @@ if (container_size && (container_size != (t_offset)-1) &&
                 const char **saved_drivetypes = drivetypes;
                 DRVTYP *saved_drvtypes = drvtypes;
                 const char *drive;
+                /* Autosizing may change how big a unit is, but not what kind
+                   of device it is, so only types of the unit's own device
+                   class are candidates.  Note the class before the walk
+                   starts: each iteration sets a new drive type on the unit,
+                   so uptr->drvtyp below would be the previous candidate. */
+                t_bool scsi_unit = ((uptr->drvtyp != NULL) &&
+                                    (DRVFL_GET_IFTYPE(uptr->drvtyp) == DRVFL_TYPE_SCSI));
+                uint32 unit_devtype = scsi_unit ? uptr->drvtyp->devtype : 0;
 
                 /* Walk through all potential drive types (if any) until we find one at least the right size */
                 for (drive = (drivetypes != NULL) ? *drivetypes : drvtypes->name;
@@ -3987,9 +3995,10 @@ if (container_size && (container_size != (t_offset)-1) &&
                     int32 saved_switches = sim_switches;
                     uint32 saved_RO = (uptr->flags & UNIT_RO);
 
-                    if ((drvtypes != NULL) &&
-                        (DRVFL_GET_IFTYPE(drvtypes) == DRVFL_TYPE_SCSI) && (drvtypes->devtype == SCSI_TAPE))
-                        continue;
+                    if (scsi_unit && (drvtypes != NULL) &&
+                        (DRVFL_GET_IFTYPE(drvtypes) == DRVFL_TYPE_SCSI) &&
+                        (drvtypes->devtype != unit_devtype))
+                        continue;                   /* different device class */
                     uptr->flags &= ~UNIT_ATT;       /* temporarily mark as un-attached */
                     if ((size_settable_drive_type != NULL) &&
                         (strcasecmp (size_settable_drive_type->name, drive) == 0))
