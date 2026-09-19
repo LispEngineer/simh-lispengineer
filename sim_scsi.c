@@ -1514,6 +1514,8 @@ uint32 scsi_data (SCSI_BUS *bus, uint8 *data, uint32 len)
 {
 uint32 i;
 
+if (bus->buf_b > bus->buf_size)                         /* never leave the buffer */
+    bus->buf_b = bus->buf_size;
 for (i = 0; ((i < len) && (bus->buf_t != bus->buf_b)); i++, bus->buf_t++)
     bus->buf[bus->buf_t] = data[i];
 if (bus->buf_t == bus->buf_b) {
@@ -1577,6 +1579,8 @@ if (len == 0) {
     return 0;
     }
 scsi_release_req (bus);                                 /* assume done */
+if (bus->buf_b > bus->buf_size)                         /* never leave the buffer */
+    bus->buf_b = bus->buf_size;
 for (i = 0; ((i < len) && (bus->buf_t != bus->buf_b)); i++, bus->buf_t++)
     data[i] = bus->buf[bus->buf_t];
 if (bus->buf_t == bus->buf_b) {
@@ -1668,6 +1672,7 @@ if (bus->buf == NULL)
     bus->buf = (uint8 *)calloc (maxfr, sizeof(uint8));
 if (bus->buf == NULL)
     return SCPE_MEM;
+bus->buf_size = maxfr;                                  /* remember the limit */
 return SCPE_OK;
 }
 
