@@ -122,6 +122,7 @@ void scsi_add_unit (SCSI_BUS *bus, uint32 id, UNIT *uptr);
 void scsi_reset_unit (UNIT *uptr);
 void scsi_reset (SCSI_BUS *bus);
 t_stat scsi_init (SCSI_BUS *bus, uint32 maxfr);
+t_bool scsi_xfer_too_big (SCSI_BUS *bus, uint32 bytes);
 
 t_stat scsi_set_fmt (UNIT *uptr, int32 val, CONST char *cptr, void *desc);
 t_stat scsi_set_wlk (UNIT *uptr, int32 val, CONST char *cptr, void *desc);
