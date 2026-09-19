@@ -90,6 +90,7 @@ Internal routines:
 
 #include "sim_defs.h"
 #include "sim_disk.h"
+#include <execinfo.h>   /* SCAFFOLD */
 #include "sim_ether.h"
 #include "sim_scsi.h"
 
@@ -428,6 +429,18 @@ uint32 f;
 
 if (uptr == NULL)
     return SCPE_IERR;
+sim_printf ("SCAFFOLD set_fmt: '%s' (was fmt=%d) attached=%d\n",
+            (cptr == NULL) ? "(null)" : cptr, (int)DK_GET_FMT (uptr),
+            (uptr->flags & UNIT_ATT) ? 1 : 0);
+if ((cptr != NULL) && (0 == strcmp (cptr, "AUTO"))) {   /* SCAFFOLD: who reverts to AUTO? */
+    void *bt[12];
+    int nbt = backtrace (bt, 12);
+    char **syms = backtrace_symbols (bt, nbt);
+    int bi;
+    for (bi = 1; (bi < nbt) && (bi < 6); bi++)
+        sim_printf ("SCAFFOLD   bt[%d]: %s\n", bi, syms ? syms[bi] : "?");
+    free (syms);
+    }
 if ((cptr == NULL) || (*cptr == '\0'))
     return SCPE_ARG;
 for (f = 0; fmts[f].name; f++) {
@@ -934,7 +947,11 @@ if ((0 == (ctx->sector_size & (ctx->storage_sector_size - 1))) ||   /* Sector Al
         case DKUF_F_RAW:                                /* Raw Physical Disk Access */
             r = sim_os_disk_rdsect (uptr, lba, rbuf, &sread, sects);
             break;
+        /* SCAFFOLD: DKUF_F_AUTO (0) has no case here; it reaches default and
+           returns without ever assigning *sectsread. */
         default:
+            sim_printf ("SCAFFOLD rdsect: unhandled fmt=%d (AUTO=0) lba=%u sects=%u -> SCPE_NOFNC, *sectsread LEFT UNSET\n",
+                        (int)f, (uint32)lba, (uint32)sects);
             free (tbuf);
             return SCPE_NOFNC;
         }
@@ -3262,6 +3279,7 @@ if (!(uptr->flags & UNIT_ATTABLE))                      /* not attachable? */
     return SCPE_NOATT;
 if ((dptr = find_dev_from_unit (uptr)) == NULL)
     return SCPE_NOATT;
+sim_printf ("SCAFFOLD ATTACH-ENTRY: '%s' switches=0x%X RO=%d\n", cptr ? cptr : "", (uint32)sim_switches, (uptr->flags & UNIT_RO) ? 1 : 0);
 if ((uptr->flags & DKUF_NOAUTOSIZE) != 0) {             /* unit autosize disabled? */
     dontchangecapac = TRUE;
     drivetypes = NULL;
@@ -3338,6 +3356,7 @@ if (sim_switches & SWMASK ('C')) {                      /* create new disk conta
         return sim_messagef (SCPE_2FARG, "Missing Copy container source specification\n");
     sim_switches |= SWMASK ('R') | SWMASK ('E');
     sim_quiet = TRUE;
+    sim_printf ("SCAFFOLD site: copy-container (line 3341)\n");
     sim_disk_set_fmt (uptr, 0, "AUTO", NULL);   /* autodetect the source container format */
     uptr->flags &= ~DKUF_NOAUTOSIZE;            /* autosize the source container */
     /* First open the source of the copy operation */
@@ -4227,8 +4246,10 @@ free (uptr->disk_ctx);
 uptr->disk_ctx = NULL;
 uptr->io_flush = NULL;
 
-if (auto_format)
+if (auto_format) {
+    sim_printf ("SCAFFOLD site: sim_disk_detach restoring AUTO\n");
     sim_disk_set_fmt (uptr, 0, "AUTO", NULL);           /* restore file format */
+    }
 
 if (close_function (fileref) == EOF) {
     free (autozap_filename);
@@ -8151,9 +8172,16 @@ if (cptr) {
     if ((r != SCPE_OK) || (cap < DRV_MINC) || (cap > max))
         return sim_messagef (SCPE_ARG, "%s: Unreasonable capacity: %u\n", sim_uname (uptr), cap);
     }
+sim_printf ("SCAFFOLD set_drive_type: '%s'(iftype=%d devtype=%d) -> '%s'(devtype=%d) attached=%d\n",
+            (uptr->drvtyp != NULL) ? uptr->drvtyp->name : "(none)",
+            (uptr->drvtyp != NULL) ? (int)DRVFL_GET_IFTYPE(uptr->drvtyp) : -1,
+            (uptr->drvtyp != NULL) ? (int)uptr->drvtyp->devtype : -1,
+            drives[val].name, (int)drives[val].devtype,
+            (uptr->flags & UNIT_ATT) ? 1 : 0);
 if ((uptr->drvtyp != NULL) &&
     (DRVFL_GET_IFTYPE(uptr->drvtyp) == DRVFL_TYPE_SCSI) &&
     (uptr->drvtyp->devtype != drives[val].devtype)) {
+    sim_printf ("SCAFFOLD   -> devtype differs: resetting disk format to AUTO\n");
     sim_tape_set_fmt (uptr, 0, "SIMH", NULL);
     sim_disk_set_fmt (uptr, 0, "AUTO", NULL);
     sim_tape_set_chunk_mode (uptr, ((drives[val].devtype == SCSI_TAPE) &&

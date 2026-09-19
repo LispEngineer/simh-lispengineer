@@ -780,6 +780,7 @@ if (sects == 0)
 
 scsi_debug_cmd (bus, "Read(6) lba %d blks %d\n", lba, sects);
 
+sectsread = 0xA5A5;                                     /* SCAFFOLD: poison */
 if (uptr->flags & UNIT_ATT)
     r = sim_disk_rdsect (uptr, lba, &bus->buf[0], &sectsread, sects);
 else {
@@ -787,6 +788,9 @@ else {
     sectsread = sects;
     }
 
+sim_printf ("SCAFFOLD read6:  lba=%u sects=%u -> r=%d sectsread=0x%X buf_b=%u\n",
+            (uint32)lba, (uint32)sects, (int)r, (uint32)sectsread,
+            (uint32)(sectsread * uptr->drvtyp->sectsize));
 bus->buf_b = (sectsread * uptr->drvtyp->sectsize);
 scsi_set_phase (bus, SCSI_DATI);                        /* data in phase next */
 scsi_set_req (bus);                                     /* request to send data */
@@ -918,6 +922,7 @@ if (sects == 0) {                                       /* no data to read */
     return;
     }
 
+sectsread = 0xA5A5;                                     /* SCAFFOLD: poison */
 if (uptr->flags & UNIT_ATT)
     r = sim_disk_rdsect (uptr, lba, &bus->buf[0], &sectsread, sects);
 else {
@@ -925,6 +930,9 @@ else {
     sectsread = sects;
     }
 
+sim_printf ("SCAFFOLD read10: lba=%u sects=%u -> r=%d sectsread=0x%X buf_b=%u\n",
+            (uint32)lba, (uint32)sects, (int)r, (uint32)sectsread,
+            (uint32)(sectsread * uptr->drvtyp->sectsize));
 bus->buf_b = (sectsread * uptr->drvtyp->sectsize);
 scsi_set_phase (bus, SCSI_DATI);                        /* data in phase next */
 scsi_set_req (bus);                                     /* request to send data */
