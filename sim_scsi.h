@@ -95,6 +95,7 @@ struct scsi_bus_t {
     t_bool atn;                                         /* attention flag */
     t_bool req;                                         /* request flag */
     uint8 *buf;                                         /* transfer buffer */
+    uint32 buf_size;                                    /* transfer buffer size */
     uint8 cmd[10];                                      /* command buffer */
     uint32 buf_b;                                       /* buffer bottom ptr */
     uint32 buf_t;                                       /* buffer top ptr */
