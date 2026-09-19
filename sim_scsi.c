@@ -699,8 +699,9 @@ if (pc == 0x8) {
 memset (&bus->buf[0], 0, data[4]);                      /* allocation len */
 bus->buf[bus->buf_b++] = 0x0;                           /* mode data length */
 bus->buf[bus->buf_b++] = 0x0;                           /* medium type */
-if (uptr->drvtyp->devtype == SCSI_CDROM)
-    bus->buf[bus->buf_b++] = 0x80;                      /* dev specific param */
+if ((uptr->drvtyp->devtype == SCSI_CDROM) ||            /* write protected? */
+    ((uptr->flags & UNIT_RO) != 0))
+    bus->buf[bus->buf_b++] = 0x80;                      /* dev specific param: WP */
 else
     bus->buf[bus->buf_b++] = 0x0;                       /* dev specific param */
 bus->buf[bus->buf_b++] = 0x8;                           /* block descriptor len */
@@ -734,7 +735,9 @@ memset (&bus->buf[0], 0, GETW (data, 7));               /* allocation len */
 bus->buf[bus->buf_b++] = 0x0;                           /* mode data length (15:8) */
 bus->buf[bus->buf_b++] = 0x0;                           /* mode data length (7:0) */
 bus->buf[bus->buf_b++] = 0x0;                           /* medium type */
-bus->buf[bus->buf_b++] = 0x0;                           /* dev specific param */
+bus->buf[bus->buf_b++] =                                /* dev specific param */
+    (((bus->dev[bus->target]->drvtyp->devtype == SCSI_CDROM) ||
+      ((bus->dev[bus->target]->flags & UNIT_RO) != 0)) ? 0x80 : 0x0);  /* WP */
 bus->buf[bus->buf_b++] = 0x0;                           /* reserved */
 bus->buf[bus->buf_b++] = 0x0;                           /* reserved */
 bus->buf[bus->buf_b++] = 0x0;                           /* block descriptor len (15:8) */
