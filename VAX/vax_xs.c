@@ -525,8 +525,22 @@ for (;;) {
         else {
             /* transmit packet synchronously - write callback sets status */
             wstatus = eth_write(xs->var->etherface, &xs->var->write_buffer, xs->var->wcallback);
-            if (wstatus)
-                xs->var->csr0 |= CSR0_BABL;
+            if (wstatus) {
+                /* The frame never went out: the unit is not attached, or eth_write
+                   rejected it without calling the write callback. Report it as the
+                   chip reports a transmission that found no carrier - TXR_LCAR plus
+                   the TXR_ERRS summary in the descriptor - and leave CSR0 alone.
+                   CSR0_BABL is a transmitter timeout, which a transmit that never
+                   started cannot cause, and CSR0<ERR> summarises BABL, CERR, MISS
+                   and MERR only, never a descriptor error. A failure the callback
+                   has already reported (an asynchronous write returns the status of
+                   an earlier one) is left to the retry path below, so that one frame
+                   is not given two different errors. */
+                if (xs->var->write_buffer.status == 0) {
+                    xs->var->txhdr[3] |= TXR_LCAR;
+                    xs->var->txhdr[1] |= TXR_ERRS;
+                    }
+                }
             else if (DEBUG_PRI (xs_dev, DBG_PCK))
                 eth_packet_trace_ex (xs->var->etherface, xs->var->write_buffer.msg, xs->var->write_buffer.len, "xs-write", DEBUG_PRI (xs_dev, DBG_DAT), DBG_PCK);
             }
