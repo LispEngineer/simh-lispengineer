@@ -46,6 +46,7 @@
 #define CMD_READ10      0x28                            /* read (10 bytes) */
 #define CMD_RDLONG      0x3E                            /* read long */
 #define CMD_RDSUBCH     0x42                            /* read sub-channel (CD-ROM) */
+#define CMD_RDTOC       0x43                            /* read TOC (CD-ROM) */
 #define CMD_WRITE6      0x0A                            /* write (6 bytes) */
 #define CMD_WRITE10     0x2A                            /* write (10 bytes) */
 #define CMD_ERASE       0x19                            /* erase */
@@ -1329,6 +1330,61 @@ else {
     }
 }
 
+/* Command - Read TOC (CD-ROM)
+
+   An image file holds one data track, so the table of contents has track 1
+   and the lead-out, which starts where the image ends.  A starting track of
+   zero means the first track; 0xAA asks for the lead-out alone (SCSI-2,
+   14.2.11). */
+
+void scsi_read_toc (SCSI_BUS *bus, uint8 *data, uint32 len)
+{
+UNIT *uptr = bus->dev[bus->target];
+t_bool msf = ((data[1] & 0x02) != 0);
+uint32 start = data[6];
+uint32 alloc = GETW (data, 7);
+uint32 ndesc;
+
+scsi_debug_cmd (bus, "Read TOC, msf = %d, track = %d, alloc = %d\n", msf, start, alloc);
+
+if ((uptr->flags & UNIT_ATT) == 0) {                    /* not attached? */
+    scsi_status (bus, STS_CHK, KEY_NOTRDY, ASC_NOMEDIA);
+    return;
+    }
+if ((start > 1) && (start != 0xAA)) {                   /* no such track? */
+    scsi_status (bus, STS_CHK, KEY_ILLREQ, ASC_INVCDB);
+    return;
+    }
+
+ndesc = (start == 0xAA)? 1: 2;                          /* track 1 (unless skipped), lead-out */
+bus->buf_b = 0;
+PUTW (bus->buf, 0, (2 + (8 * ndesc)));                  /* TOC data length */
+bus->buf_b += 2;
+bus->buf[bus->buf_b++] = 1;                             /* first track */
+bus->buf[bus->buf_b++] = 1;                             /* last track */
+
+if (start != 0xAA) {
+    bus->buf[bus->buf_b++] = 0;                         /* reserved */
+    bus->buf[bus->buf_b++] = CD_CTL_DATA;               /* ADR, control */
+    bus->buf[bus->buf_b++] = 1;                         /* track number */
+    bus->buf[bus->buf_b++] = 0;                         /* reserved */
+    scsi_cd_address (bus, 0, msf);               /* track start */
+    }
+bus->buf[bus->buf_b++] = 0;                             /* reserved */
+bus->buf[bus->buf_b++] = CD_CTL_DATA;                   /* ADR, control */
+bus->buf[bus->buf_b++] = 0xAA;                          /* lead-out */
+bus->buf[bus->buf_b++] = 0;                             /* reserved */
+scsi_cd_address (bus, (uint32)uptr->capac, msf); /* lead-out start */
+
+if (alloc == 0)                                         /* nothing wanted? */
+    scsi_status (bus, STS_OK, KEY_OK, ASC_OK);
+else {
+    scsi_check_alloc (bus, alloc);                      /* check allocation */
+    scsi_set_phase (bus, SCSI_DATI);                    /* data in phase next */
+    scsi_set_req (bus);                                 /* request to send data */
+    }
+}
+
 /* Process a SCSI command for a direct-access device */
 
 void scsi_disk_command (SCSI_BUS *bus, uint8 *data, uint32 len)
@@ -1553,6 +1609,10 @@ switch (data[0]) {
 
     case CMD_RDSUBCH:                                   /* optional */
         scsi_read_subchannel (bus, data, len);
+        break;
+
+    case CMD_RDTOC:                                     /* optional */
+        scsi_read_toc (bus, data, len);
         break;
 
     case CMD_RELEASE:                                   /* mandatory */
