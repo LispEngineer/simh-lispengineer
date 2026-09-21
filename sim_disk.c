@@ -2966,10 +2966,11 @@ if (f) {
                 f->ElementEncodingSize = NtoHl (2);
                 if ((uptr->flags & UNIT_RO) == 0)
                     store_disk_footer (uptr, (char *)f->DriveType);
-                if (f != ctx->footer) {
-                    free (f);
+                /* store_disk_footer() has already freed the footer that
+                   ctx->footer pointed at (which is f) and installed its
+                   own, so f must only be re-aimed here, never freed. */
+                if (f != ctx->footer)
                     f = ctx->footer;                /* Get possibly updated metadata footer */
-                    }
                 }
             }
         if ((uptr->flags & UNIT_RO) == 0) {
