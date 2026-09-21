@@ -8440,6 +8440,129 @@ fclose (f);
 return r;
 }
 
+/* Re-attaching a container must leave it exactly as it was.
+
+   A container with no footer gets a 512 byte footer appended the first
+   time it is attached read/write.  Attaching it a second time takes the
+   footer correction path in get_disk_footer(), and that path used to
+   free a footer store_disk_footer() had already freed (an immediate
+   abort), and - on a container of exactly 4 GiB, where a sector count
+   times a sector size overflowed 32 bits - to write the new footer over
+   the last sector of user data and truncate the container back to its
+   original size.  Neither is visible from inside the simulator, so what
+   is checked here is the container: its size, and the contents of its
+   last data sector.
+
+   The container is created sparse and only two of its sectors are ever
+   written, so on a host file system with holes it costs almost nothing.
+   A device with no drive type large enough for it skips the test. */
+
+#define REATTACH_TEST_SIZE      ((t_offset)0x100000000)     /* 4 GiB exactly */
+#define REATTACH_TEST_PASSES    3
+
+static t_stat _sim_disk_reattach_case (DEVICE *dptr, t_offset test_size, const char *why)
+{
+const char *filename = "TestReAttach.dsk";
+UNIT *uptr = &dptr->units[0];
+t_offset saved_pseudo_filesystem_size = pseudo_filesystem_size;
+int32 saved_switches = sim_switches;
+uint32 saved_flags = uptr->flags;
+uint8 marker[512];
+uint8 readback[512];
+t_offset expected_size = test_size + sizeof (struct simh_disk_footer);
+t_offset container_size;
+char cmd[CBUFSIZE];
+FILE *f;
+t_stat r = SCPE_OK;
+uint32 i;
+int pass;
+
+sim_printf ("\nA %s byte container (%s)\n", sim_fmt_numeric ((double)test_size), why);
+(void)remove (filename);
+if (SCPE_OK != _sim_disk_test_create (filename, (size_t)test_size)) {
+    (void)remove (filename);
+    sim_printf ("Skipped: the container could not be created\n");
+    return SCPE_OK;
+    }
+for (i = 0; i < sizeof (marker); i++)       /* a pattern in the last data sector */
+    marker[i] = (uint8)(i ^ 0xA5);
+f = sim_fopen (filename, "rb+");
+if ((f == NULL) ||
+    (sim_fseeko (f, test_size - sizeof (marker), SEEK_SET) != 0) ||
+    (sizeof (marker) != sim_fwrite (marker, 1, sizeof (marker), f))) {
+    if (f != NULL)
+        fclose (f);
+    (void)remove (filename);
+    return sim_messagef (SCPE_IOERR, "Can't write the last sector of %s\n", filename);
+    }
+fclose (f);
+
+sim_switches = 0;
+snprintf (cmd, sizeof (cmd), "%s AUTOSIZE", sim_uname (uptr));
+set_cmd (0, cmd);
+pseudo_filesystem_size = test_size;         /* the whole container is in use */
+
+for (pass = 0; pass < REATTACH_TEST_PASSES; pass++) {
+    sim_printf ("Attach %d of %s\n", 1 + pass, filename);
+    r = dptr->attach (uptr, (CONST char *)filename);
+    if (r != SCPE_OK) {
+        if (pass == 0) {                    /* no drive type big enough? */
+            sim_printf ("Skipped: %s\n", sim_error_text (SCPE_BARE_STATUS (r)));
+            r = SCPE_OK;
+            }
+        else
+            r = sim_messagef (SCPE_INCOMP, "Attach %d failed: %s\n",
+                              1 + pass, sim_error_text (SCPE_BARE_STATUS (r)));
+        break;
+        }
+    show_cmd (0, sim_uname (uptr));
+    sim_disk_detach (uptr);
+    container_size = sim_fsize_name_ex (filename);
+    if ((pass == 0) && (container_size != expected_size)) {
+        sim_printf ("Skipped: the container is %s bytes after the first attach, not the case under test\n",
+                    sim_fmt_numeric ((double)container_size));
+        break;
+        }
+    if (container_size != expected_size) {
+        sim_printf ("Container is %s bytes after attach %d, ", sim_fmt_numeric ((double)container_size), 1 + pass);
+        r = sim_messagef (SCPE_INCOMP, "expected %s bytes\n", sim_fmt_numeric ((double)expected_size));
+        break;
+        }
+    f = sim_fopen (filename, "rb");          /* the last data sector must be untouched */
+    if ((f == NULL) ||
+        (sim_fseeko (f, test_size - sizeof (marker), SEEK_SET) != 0) ||
+        (sizeof (readback) != sim_fread (readback, 1, sizeof (readback), f))) {
+        if (f != NULL)
+            fclose (f);
+        r = sim_messagef (SCPE_IOERR, "Can't read the last sector of %s\n", filename);
+        break;
+        }
+    fclose (f);
+    if (0 != memcmp (marker, readback, sizeof (marker))) {
+        r = sim_messagef (SCPE_INCOMP, "The last data sector was overwritten by attach %d\n", 1 + pass);
+        break;
+        }
+    sim_printf ("Attach %d left %s intact\n", 1 + pass, filename);
+    }
+if ((uptr->flags & UNIT_ATT) != 0)
+    sim_disk_detach (uptr);
+pseudo_filesystem_size = saved_pseudo_filesystem_size;
+sim_switches = saved_switches;
+uptr->flags = saved_flags;
+(void)remove (filename);
+return r;
+}
+
+t_stat sim_disk_reattach_test (DEVICE *dptr, const char *cptr)
+{
+SIM_TEST_INIT;
+
+sim_printf ("\n*** Container re-attach behavior test\n");
+SIM_TEST (_sim_disk_reattach_case (dptr, REATTACH_TEST_SIZE,
+                                   "a sector count times a sector size is exactly 2**32"));
+return SCPE_OK;
+}
+
 /* Autosizing and Meta data testing support. */
 /* Only operate on specific disk cases: */
 /* Device: */
@@ -8657,6 +8780,7 @@ t_stat r;
 int32 saved_switches = sim_switches & ~SWMASK('T');
 SIM_TEST_INIT;
 
+SIM_TEST (sim_disk_reattach_test (dptr, cptr));
 if (sim_switches & SWMASK ('M')) { /* Do meta first? */
     sim_switches = saved_switches &= ~SWMASK ('M');
     SIM_TEST (sim_disk_meta_attach_test (dptr, cptr));
