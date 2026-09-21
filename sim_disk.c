@@ -3090,7 +3090,7 @@ else {
     highwater = ((highwater + ctx->sector_size - 1) / ctx->sector_size) * ctx->sector_size;
     }
 if ((old_f != NULL) || (highwater > (total_sectors * ctx->sector_size))) {
-    if ((old_f != NULL) && (highwater != (NtoHl (old_f->SectorCount) * ctx->sector_size)))
+    if ((old_f != NULL) && (highwater != (((t_offset)NtoHl (old_f->SectorCount)) * ctx->sector_size)))
         highwater -= sizeof (*old_f);
     if ((drvtyp != NULL) && ((drvtyp->flags & DRVFL_SETSIZE) != 0)) { /* Settable size meta data fixup */
         total_sectors = highwater / ctx->sector_size;
