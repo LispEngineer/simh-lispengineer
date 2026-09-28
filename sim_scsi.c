@@ -1259,7 +1259,10 @@ else {
    The drive never plays audio, so the audio status is always "no current
    audio status to return" and the position is that of the first block of the
    one data track.  With the SubQ bit clear only the four byte header is
-   returned, with a data length of zero (SCSI-2, 14.2.10). */
+   returned, with a data length of zero (SCSI-2, 14.2.10).  Format 0 is the
+   whole sub-Q channel block (current position, then the media catalogue
+   number and the ISRC, neither of which an image file has); formats 1 to 3
+   are its parts (tables 253 and 257 to 259). */
 
 void scsi_read_subchannel (SCSI_BUS *bus, uint8 *data, uint32 len)
 {
@@ -1276,7 +1279,7 @@ if ((uptr->flags & UNIT_ATT) == 0) {                    /* not attached? */
     scsi_status (bus, STS_CHK, KEY_NOTRDY, ASC_NOMEDIA);
     return;
     }
-if (subq && ((fmt < 1) || (fmt > 3) ||                  /* unsupported format? */
+if (subq && ((fmt > 3) ||                               /* unsupported format? */
     ((fmt == 3) && (data[6] != 1)))) {                  /* ISRC of a track that isn't there? */
     scsi_status (bus, STS_CHK, KEY_ILLREQ, ASC_INVCDB);
     return;
@@ -1292,12 +1295,17 @@ if (subq) {
     bus->buf[bus->buf_b++] = fmt;                       /* data format code */
     switch (fmt) {
 
+        case 0:                                         /* sub-Q channel data */
         case 1:                                         /* CD-ROM current position */
             bus->buf[bus->buf_b++] = CD_CTL_DATA;       /* ADR, control */
             bus->buf[bus->buf_b++] = 1;                 /* track number */
             bus->buf[bus->buf_b++] = 1;                 /* index number */
-            scsi_cd_address (bus, 0, msf);       /* absolute address */
-            scsi_cd_address (bus, 0, msf);       /* track relative address */
+            scsi_cd_address (bus, 0, msf);              /* absolute address */
+            scsi_cd_address (bus, 0, msf);              /* track relative address */
+            if (fmt == 0) {                             /* format 0 adds the identification data */
+                memset (&bus->buf[bus->buf_b], 0, 32);  /* MCVal and TCVal clear: no MCN, no ISRC */
+                bus->buf_b += 32;
+                }
             break;
 
         case 2:                                         /* media catalog number */
