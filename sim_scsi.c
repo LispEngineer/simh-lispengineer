@@ -82,6 +82,13 @@
 #define ASC_INVCDB      0x24                            /* invalid field in cdb */
 #define ASC_NOMEDIA     0x3A                            /* media not present */
 
+/* CD-ROM constants (SCSI-2, 14.1.5 and 14.2.10) */
+
+#define CD_SECTSIZE     2048                            /* physical CD-ROM sector */
+#define CD_MSF_OFFSET   150                             /* 2 seconds, in frames */
+#define CD_CTL_DATA     0x14                            /* ADR 1, control 4: data track */
+#define AUD_NOSTATUS    0x15                            /* no current audio status to return */
+
 #define PUTL(b,x,v)     b[x] = (v >> 24) & 0xFF; \
                         b[x+1] = (v >> 16) & 0xFF; \
                         b[x+2] = (v >> 8) & 0xFF; \
@@ -1230,11 +1237,6 @@ scsi_status (bus, STS_OK, KEY_OK, ASC_OK);              /* GOOD status */
    the frame count is offset by 150.  The logical block size a unit presents
    may differ from the physical one (an RRD42 presents 512 byte blocks), so a
    logical block count is converted to physical sectors first. */
-
-#define CD_SECTSIZE     2048                            /* physical CD-ROM sector */
-#define CD_MSF_OFFSET   150                             /* 2 seconds, in frames */
-#define CD_CTL_DATA     0x14                            /* ADR 1, control 4: data track */
-#define AUD_NOSTATUS    0x15                            /* no current audio status to return */
 
 static void scsi_cd_address (SCSI_BUS *bus, uint32 pos, t_bool msf)
 {
